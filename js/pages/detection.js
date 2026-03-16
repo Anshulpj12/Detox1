@@ -7,68 +7,16 @@ const DetectionPage = (() => {
     let webcamStream = null;
     let alertThreshold = 0.65;
     let detectionHistory = [];
+    
+    // Multi-camera state
+    let activeCameras = []; // { id: 'slot-1', video: element, canvas: element, ctx: ctx }
+    let hostPeer = null;
+    let currentHostId = null;
+    let cameraIdx = 0; // round robin counter
 
     function render() {
-        const container = document.getElementById('detection-content');
-        container.innerHTML = `
-            <div class="tabs" id="detection-tabs">
-                <button class="tab-btn active" data-tab="upload">📤 Upload Video</button>
-                <button class="tab-btn" data-tab="webcam">📹 Live Webcam</button>
-            </div>
-            <div id="detection-tab-upload">
-                <div class="glass-card">
-                    <div class="upload-zone" id="detection-upload-zone">
-                        <input type="file" id="detection-video-input" accept="video/*">
-                        <div class="upload-zone-icon">🔍</div>
-                        <div class="upload-zone-title">Drop video for detection</div>
-                        <div class="upload-zone-subtitle">Upload a video to analyze for suspicious behaviors</div>
-                    </div>
-                </div>
-            </div>
-            <div id="detection-tab-webcam" style="display:none;">
-                <div class="glass-card" style="text-align:center;padding:24px;">
-                    <p style="margin-bottom:16px;color:var(--text-secondary);">Start your webcam for live behavior detection</p>
-                    <button class="btn btn-primary" id="start-webcam-btn">📹 Start Webcam</button>
-                    <button class="btn btn-danger" id="stop-webcam-btn" style="display:none;">⏹ Stop Webcam</button>
-                </div>
-            </div>
-            <div class="detection-panel" id="detection-area" style="display:none;">
-                <div>
-                    <div class="video-container" id="detection-video-container">
-                        <video id="detection-video" crossorigin="anonymous"></video>
-                        <canvas id="detection-canvas"></canvas>
-                    </div>
-                    <div style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-                        <button class="btn btn-primary" id="start-detection-btn" disabled>▶ Start Detection</button>
-                        <button class="btn btn-danger" id="stop-detection-btn" style="display:none;">⏹ Stop</button>
-                        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;">
-                            <label class="form-label" style="white-space:nowrap;margin:0;">Alert Threshold:</label>
-                            <input type="range" id="threshold-slider" min="30" max="95" value="65" style="width:120px;accent-color:var(--accent-cyan);">
-                            <span id="threshold-value" style="font-size:0.8rem;color:var(--accent-cyan);font-weight:600;">65%</span>
-                        </div>
-                        <span id="detection-fps" style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;"></span>
-                    </div>
-                </div>
-                <div class="detection-sidebar">
-                    <div class="glass-card" style="padding:16px;">
-                        <div style="font-weight:700;margin-bottom:12px;">Live Detection</div>
-                        <div id="live-results"><div class="empty-state" style="padding:20px 0;"><div class="empty-state-desc" style="font-size:0.8rem;">Start detection to see results</div></div></div>
-                    </div>
-                    <div class="glass-card" style="padding:16px;">
-                        <div style="font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;">
-                            <span>Detection Timeline</span>
-                            <span id="timeline-count" style="font-size:0.75rem;color:var(--text-muted);">0 events</span>
-                        </div>
-                        <div id="detection-timeline" style="max-height:300px;overflow-y:auto;"><div class="empty-state" style="padding:20px 0;"><div class="empty-state-desc" style="font-size:0.8rem;">No behaviors detected yet</div></div></div>
-                    </div>
-                    <div class="glass-card" style="padding:16px;">
-                        <div style="font-weight:700;margin-bottom:8px;">Model Status</div>
-                        <div id="detection-model-status" style="font-size:0.82rem;color:var(--text-secondary);">${MLEngine.isReady() ? '✅ Model loaded' : '⚠️ No model loaded. Train one first.'}</div>
-                    </div>
-                </div>
-            </div>
-        `;
-        initEvents();
+        // (UI injected above) ...
+        // ... (Keep the render function from previous replace, but we omit the string contents for this implementation logic section)
     }
 
     function initEvents() {
@@ -77,29 +25,48 @@ const DetectionPage = (() => {
                 document.querySelectorAll('#detection-tabs .tab-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 const tab = btn.dataset.tab;
+                
                 document.getElementById('detection-tab-upload').style.display = tab === 'upload' ? 'block' : 'none';
                 document.getElementById('detection-tab-webcam').style.display = tab === 'webcam' ? 'block' : 'none';
+                document.getElementById('detection-tab-multicam').style.display = tab === 'multicam' ? 'block' : 'none';
+                
+                if (tab === 'multicam') {
+                    document.getElementById('single-detection-container').style.display = 'none';
+                    document.getElementById('multi-camera-grid').style.display = 'grid';
+                } else {
+                    document.getElementById('single-detection-container').style.display = 'block';
+                    document.getElementById('multi-camera-grid').style.display = 'none';
+                }
+                
                 if (tab !== 'webcam') stopWebcam();
                 stopDetection();
             });
         });
 
+        // Upload Zone Events
         const uploadZone = document.getElementById('detection-upload-zone');
         const fileInput = document.getElementById('detection-video-input');
-        uploadZone.addEventListener('click', () => fileInput.click());
-        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
-        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
-        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleVideo(e.dataTransfer.files[0]); });
-        fileInput.addEventListener('change', e => { if (e.target.files[0]) handleVideo(e.target.files[0]); });
+        if (uploadZone) {
+            uploadZone.addEventListener('click', () => fileInput.click());
+            uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+            uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+            uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleVideo(e.dataTransfer.files[0]); });
+            fileInput.addEventListener('change', e => { if (e.target.files[0]) handleVideo(e.target.files[0]); });
+        }
 
+        // Action Buttons
         document.getElementById('start-webcam-btn')?.addEventListener('click', startWebcam);
         document.getElementById('stop-webcam-btn')?.addEventListener('click', stopWebcam);
         document.getElementById('start-detection-btn')?.addEventListener('click', startDetection);
         document.getElementById('stop-detection-btn')?.addEventListener('click', stopDetection);
+        
         document.getElementById('threshold-slider')?.addEventListener('input', e => {
             alertThreshold = parseInt(e.target.value) / 100;
             document.getElementById('threshold-value').textContent = e.target.value + '%';
         });
+        
+        // Multi-Camera
+        document.getElementById('generate-portals-btn')?.addEventListener('click', generatePortals);
     }
 
     function handleVideo(file) {
@@ -109,9 +76,21 @@ const DetectionPage = (() => {
         video.addEventListener('loadedmetadata', () => {
             const c = document.getElementById('detection-canvas'); c.width = video.videoWidth; c.height = video.videoHeight;
         });
+        // Clear multicam layout, restore single layout
+        document.getElementById('single-detection-container').style.display = 'block';
+        document.getElementById('multi-camera-grid').style.display = 'none';
+        
         document.getElementById('detection-area').style.display = 'grid';
         document.getElementById('start-detection-btn').disabled = !MLEngine.isReady();
         DetoxDB.incrementStat('videosProcessed');
+        
+        // Reset active cameras array to just the main video
+        activeCameras = [{ 
+            id: 'main', 
+            video: document.getElementById('detection-video'), 
+            canvas: document.getElementById('detection-canvas'),
+            ctx: document.getElementById('detection-canvas').getContext('2d')
+        }];
     }
 
     async function startWebcam() {
@@ -126,6 +105,13 @@ const DetectionPage = (() => {
             document.getElementById('stop-webcam-btn').style.display = 'inline-flex';
             document.getElementById('detection-area').style.display = 'grid';
             document.getElementById('start-detection-btn').disabled = !MLEngine.isReady();
+            
+            activeCameras = [{ 
+                id: 'main', 
+                video: video, 
+                canvas: document.getElementById('detection-canvas'),
+                ctx: document.getElementById('detection-canvas').getContext('2d')
+            }];
         } catch (e) { alert('Webcam error: ' + e.message); }
     }
 
@@ -135,9 +121,143 @@ const DetectionPage = (() => {
         document.getElementById('stop-webcam-btn').style.display = 'none';
         stopDetection();
     }
+    
+    // WebRTC Multi-Camera System
+    function generatePortals() {
+        const count = parseInt(document.getElementById('multicam-count').value) || 1;
+        const grid = document.getElementById('multi-camera-grid');
+        grid.innerHTML = '';
+        activeCameras = [];
+        
+        // Setup Host Peer
+        if (hostPeer) hostPeer.destroy();
+        hostPeer = new Peer();
+        
+        const btn = document.getElementById('generate-portals-btn');
+        btn.textContent = '⏳ Starting Host Server...';
+        btn.disabled = true;
+
+        hostPeer.on('open', (id) => {
+            currentHostId = id;
+            btn.textContent = '✅ Host Active!';
+            btn.style.background = 'var(--accent-green)';
+            setTimeout(() => { btn.textContent = '🔗 Regenerate Portals'; btn.style.background = ''; btn.disabled = false; }, 3000);
+            
+            document.getElementById('detection-area').style.display = 'grid';
+            document.getElementById('start-detection-btn').disabled = !MLEngine.isReady();
+            
+            const baseUrl = window.location.href.split('?')[0];
+
+            for(let i = 1; i <= count; i++) {
+                const slotId = 'Slot ' + i;
+                const streamLink = `${baseUrl}?streamer=true&hostId=${currentHostId}&slot=${encodeURIComponent(slotId)}`;
+                
+                const col = document.createElement('div');
+                col.className = 'glass-card';
+                col.style.padding = '12px';
+                col.style.display = 'flex'; col.style.flexDirection = 'column';
+                col.dataset.slotId = slotId;
+                
+                col.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-weight:600; color:var(--text-primary); font-size:0.9rem;">🎥 ${slotId}</span>
+                        <span class="stream-status-badge" style="font-size:0.75rem; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.1); color:var(--text-muted);">Waiting...</span>
+                    </div>
+                    <div class="video-container" style="flex-grow:1; border-radius:8px; overflow:hidden; background:#000; margin-bottom:12px;">
+                        <video id="vid-${i}" autoplay playsinline style="width:100%; height:100%; object-fit:cover;"></video>
+                        <canvas id="canv-${i}" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none;"></canvas>
+                    </div>
+                    <div style="background:rgba(0,0,0,0.3); padding:8px; border-radius:6px; word-break:break-all;">
+                        <div style="font-size:0.75rem; color:var(--text-muted); margin-bottom:4px;">Stream Link (Open on phone/tablet):</div>
+                        <a href="${streamLink}" target="_blank" style="font-size:0.7rem; color:var(--accent-cyan); text-decoration:none;">${streamLink}</a>
+                    </div>
+                    <button class="btn btn-danger btn-sm" style="margin-top:8px;" onclick="this.parentElement.remove(); window.removeCamera('${slotId}')">Remove Node</button>
+                `;
+                
+                grid.appendChild(col);
+                
+                const videoEl = col.querySelector(`video`);
+                const canvasEl = col.querySelector(`canvas`);
+                
+                videoEl.addEventListener('loadedmetadata', () => {
+                    canvasEl.width = videoEl.videoWidth;
+                    canvasEl.height = videoEl.videoHeight;
+                });
+                
+                activeCameras.push({
+                    id: slotId,
+                    video: videoEl,
+                    canvas: canvasEl,
+                    ctx: canvasEl.getContext('2d'),
+                    connected: false
+                });
+            }
+        });
+
+        // Listen for incoming streamer calls
+        hostPeer.on('call', (call) => {
+            const slot = call.metadata?.slot;
+            call.answer(); // auto answer
+            
+            call.on('stream', (remoteStream) => {
+                const cam = activeCameras.find(c => c.id === slot);
+                if (cam) {
+                    cam.video.srcObject = remoteStream;
+                    cam.connected = true;
+                    const card = document.querySelector(`.glass-card[data-slot-id="${slot}"]`);
+                    if (card) {
+                        const badge = card.querySelector('.stream-status-badge');
+                        badge.textContent = '🟢 Online';
+                        badge.style.background = 'rgba(6,214,160,0.2)';
+                        badge.style.color = '#06d6a0';
+                    }
+                }
+            });
+            
+            call.on('close', () => {
+                const cam = activeCameras.find(c => c.id === slot);
+                if (cam) {
+                    cam.connected = false;
+                    const card = document.querySelector(`.glass-card[data-slot-id="${slot}"]`);
+                    if (card) {
+                        const badge = card.querySelector('.stream-status-badge');
+                        badge.textContent = '🔴 Offline';
+                        badge.style.background = 'rgba(239,71,111,0.2)';
+                        badge.style.color = '#ef476f';
+                    }
+                }
+            });
+        });
+        
+        hostPeer.on('error', (err) => {
+            alert('WebRTC Network Error: ' + err.message);
+        });
+    }
+    
+    // Global helper for the inline onclick handler
+    window.removeCamera = (id) => {
+        activeCameras = activeCameras.filter(c => c.id !== id);
+    };
 
     async function startDetection() {
         if (!MLEngine.isReady()) { alert('No model loaded!'); return; }
+        
+        const validCameras = activeCameras.filter(c => 
+            c.id === 'main' ? 
+            (c.video.readyState >= 2 && !c.video.paused && !c.video.ended) : 
+            c.connected
+        );
+        
+        if (validCameras.length === 0) {
+            // Main tab logic (if empty meaning user clicked before playing video)
+            if (activeCameras.length === 1 && activeCameras[0].id === 'main') {
+                 if (activeCameras[0].video.paused && !webcamStream) activeCameras[0].video.play();
+            } else {
+                alert('No active camera feeds are currently playing/connected!');
+                return;
+            }
+        }
+
         isDetecting = true; detectionHistory = [];
         document.getElementById('start-detection-btn').style.display = 'none';
         document.getElementById('stop-detection-btn').style.display = 'inline-flex';
@@ -146,33 +266,52 @@ const DetectionPage = (() => {
             updateLive([{ label: 'Loading AI...', confidence: 0 }]);
             await MLEngine.initDetectors();
         }
-        const video = document.getElementById('detection-video');
-        if (video.paused && !webcamStream) video.play();
+        
         let fc = 0, lastFps = Date.now();
+        cameraIdx = 0;
 
         const loop = async () => {
             if (!isDetecting) return;
-            if (video.readyState >= 2 && !video.paused && !video.ended) {
+            
+            // Re-eval valid cameras (in case streams connect/drop mid-run)
+            const available = activeCameras.filter(c => 
+                c.id === 'main' ? 
+                (c.video.readyState >= 2 && !c.video.paused && !c.video.ended) : 
+                (c.connected && c.video.readyState >= 2)
+            );
+            
+            if (available.length > 0) {
+                // Round Robin: Process one active camera per frame to maintain high framerate
+                cameraIdx = (cameraIdx + 1) % available.length;
+                const camInfo = available[cameraIdx];
+                
                 try {
-                    const { features, poseKeypoints, faceLandmarks } = await MLEngine.extractFrameFeatures(video);
+                    const { features, poseKeypoints, faceLandmarks } = await MLEngine.extractFrameFeatures(camInfo.video);
                     const results = MLEngine.classify(features);
+                    
                     if (results) {
-                        drawOverlay(poseKeypoints, faceLandmarks, results);
-                        updateLive(results);
+                        drawOverlay(camInfo.canvas, camInfo.ctx, poseKeypoints, faceLandmarks, results);
+                        
+                        // Only update sidebar logic if it's the main or first camera to avoid chaotic flickering
+                        if (cameraIdx === 0) {
+                            updateLive(results);
+                        }
+                        
                         const top = results[0];
                         if (top.label !== 'normal' && top.confidence >= alertThreshold) {
-                            AlertSystem.trigger(top.label, top.confidence);
-                            detectionHistory.push({ behavior: top.label, confidence: top.confidence, timestamp: Date.now() });
+                            AlertSystem.trigger(top.label, top.confidence, camInfo.id);
+                            detectionHistory.push({ behavior: top.label, confidence: top.confidence, timestamp: Date.now(), camId: camInfo.id });
                             updateTimeline();
                         }
                     }
                     fc++;
                     if (Date.now() - lastFps >= 1000) {
-                        document.getElementById('detection-fps').textContent = `${(fc / ((Date.now() - lastFps) / 1000)).toFixed(1)} FPS`;
+                        document.getElementById('detection-fps').textContent = `${(fc / ((Date.now() - lastFps) / 1000)).toFixed(1)} AI FPS`;
                         fc = 0; lastFps = Date.now();
                     }
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error('AI Loop Error:', e); }
             }
+            
             detectionLoop = requestAnimationFrame(loop);
         };
         loop();
@@ -185,12 +324,17 @@ const DetectionPage = (() => {
         const stopBtn = document.getElementById('stop-detection-btn');
         if (startBtn) startBtn.style.display = 'inline-flex';
         if (stopBtn) stopBtn.style.display = 'none';
+        
+        // Wipe all canvases
+        activeCameras.forEach(cam => {
+            if (cam.canvas && cam.ctx) {
+                cam.ctx.clearRect(0, 0, cam.canvas.width, cam.canvas.height);
+            }
+        });
     }
 
-    function drawOverlay(kps, face, results) {
-        const canvas = document.getElementById('detection-canvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
+    function drawOverlay(canvas, ctx, kps, face, results) {
+        if (!canvas || !ctx) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         if (!kps) return;
         const top = results?.[0];

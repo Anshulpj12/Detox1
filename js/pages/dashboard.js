@@ -146,6 +146,7 @@ const DashboardPage = (() => {
                         <div class="timeline-content">
                             <div class="timeline-time">${new Date(a.timestamp).toLocaleString()}</div>
                             <div class="timeline-title">
+                                <span style="background:var(--bg-glass);padding:2px 6px;border-radius:4px;font-size:0.75rem;color:var(--accent-cyan);margin-right:8px;">${a.camera || 'Main Device'}</span>
                                 <span class="behavior-tag ${a.behavior}">${a.behavior.replace(/_/g, ' ')}</span>
                             </div>
                             <div class="timeline-desc">Confidence: ${(a.confidence * 100).toFixed(1)}%</div>

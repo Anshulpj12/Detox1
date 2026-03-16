@@ -73,6 +73,7 @@ const AlertsPage = (() => {
                 <thead>
                     <tr>
                         <th>Time</th>
+                        <th>Camera Source</th>
                         <th>Behavior</th>
                         <th>Confidence</th>
                         <th>Status</th>
@@ -82,6 +83,7 @@ const AlertsPage = (() => {
                     ${filtered.map(a => `
                         <tr>
                             <td>${new Date(a.timestamp).toLocaleString()}</td>
+                            <td><span style="background:var(--bg-glass);padding:4px 8px;border-radius:4px;font-size:0.8rem;color:var(--accent-cyan);">${a.camera || 'Main Device'}</span></td>
                             <td><span class="behavior-tag ${a.behavior}">${a.behavior.replace(/_/g, ' ')}</span></td>
                             <td>
                                 <div style="display:flex;align-items:center;gap:8px;">
@@ -100,9 +102,9 @@ const AlertsPage = (() => {
     }
 
     function exportCSV(alerts) {
-        const header = 'Timestamp,Behavior,Confidence,Status\n';
+        const header = 'Timestamp,Camera,Behavior,Confidence,Status\n';
         const rows = alerts.map(a =>
-            `${new Date(a.timestamp).toISOString()},${a.behavior},${(a.confidence * 100).toFixed(1)}%,${a.confidence > 0.8 ? 'High' : 'Medium'}`
+            `${new Date(a.timestamp).toISOString()},${a.camera || 'Main Device'},${a.behavior},${(a.confidence * 100).toFixed(1)}%,${a.confidence > 0.8 ? 'High' : 'Medium'}`
         ).join('\n');
 
         const blob = new Blob([header + rows], { type: 'text/csv' });

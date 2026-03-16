@@ -54,7 +54,7 @@ const AlertSystem = (() => {
         }
     }
 
-    function showOverlay(behavior, confidence) {
+    function showOverlay(behavior, confidence, cameraId) {
         const overlay = document.getElementById('alert-overlay');
         const msg = document.getElementById('alert-message');
         const conf = document.getElementById('alert-confidence');
@@ -68,7 +68,12 @@ const AlertSystem = (() => {
             'looking_around': '👀 Subject looking around nervously'
         };
 
-        msg.textContent = behaviorLabels[behavior] || `Behavior detected: ${behavior}`;
+        let message = behaviorLabels[behavior] || `Behavior detected: ${behavior}`;
+        if (cameraId && cameraId !== 'main') {
+            message = `[${cameraId}] ${message}`;
+        }
+
+        msg.textContent = message;
         conf.textContent = `Confidence: ${(confidence * 100).toFixed(1)}%`;
         time.textContent = new Date().toLocaleTimeString();
         overlay.classList.remove('hidden');
@@ -80,10 +85,10 @@ const AlertSystem = (() => {
         document.getElementById('alert-overlay').classList.add('hidden');
     }
 
-    async function trigger(behavior, confidence, frame) {
+    async function trigger(behavior, confidence, cameraIdName) {
         if (!isEnabled) return;
 
-        // Cooldown check
+        // Cooldown check (unique per behavior per camera if desired, but here we'll keep global per behavior to avoid alert spam)
         const now = Date.now();
         if (lastAlerts[behavior] && (now - lastAlerts[behavior]) < cooldownMs) return;
         lastAlerts[behavior] = now;
@@ -92,7 +97,7 @@ const AlertSystem = (() => {
         const alert = {
             behavior,
             confidence,
-            frame: frame || null,
+            camera: cameraIdName || 'main',
             dismissed: false
         };
         await DetoxDB.addAlert(alert);
@@ -102,8 +107,8 @@ const AlertSystem = (() => {
         unreadCount++;
         updateBadge();
 
-        // Show overlay
-        showOverlay(behavior, confidence);
+        // Show overlay passing camera ID
+        showOverlay(behavior, confidence, cameraIdName);
 
         // Notify listeners
         alertListeners.forEach(fn => fn(alert));
