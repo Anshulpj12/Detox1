@@ -194,8 +194,17 @@ const LivePage = (() => {
             video.srcObject = webcamStream;
             await video.play();
 
+            // Set mirroring if user facing to sync with human
+            const canvas = document.getElementById('live-canvas');
+            if (cameraFacing === 'user') {
+                video.style.transform = 'scaleX(-1)';
+                canvas.style.transform = 'scaleX(-1)';
+            } else {
+                video.style.transform = 'none';
+                canvas.style.transform = 'none';
+            }
+
             video.addEventListener('loadedmetadata', () => {
-                const canvas = document.getElementById('live-canvas');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
             }, { once: true });
@@ -260,7 +269,7 @@ const LivePage = (() => {
                     const results = MLEngine.classify(features);
 
                     if (results) {
-                        drawLiveOverlay(poseKeypoints, results);
+                        drawLiveOverlay(poseKeypoints, faceLandmarks, results);
                         updateCurrentResults(results);
 
                         sessionStats.totalFrames++;
@@ -318,7 +327,7 @@ const LivePage = (() => {
         loop();
     }
 
-    function drawLiveOverlay(keypoints, results) {
+    function drawLiveOverlay(keypoints, faceLandmarks, results) {
         const canvas = document.getElementById('live-canvas');
         if (!canvas || !keypoints) return;
         const ctx = canvas.getContext('2d');
@@ -328,7 +337,22 @@ const LivePage = (() => {
         const danger = top && top.label !== 'normal' && top.confidence >= alertThreshold;
         const color = danger ? 'rgba(239,71,111,0.85)' : 'rgba(0,245,212,0.7)';
 
-        const conns = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+        // Draw face mesh if available
+        if (faceLandmarks && faceLandmarks.length > 0) {
+            ctx.fillStyle = danger ? 'rgba(239,71,111,0.4)' : 'rgba(0,245,212,0.4)';
+            faceLandmarks.forEach(kp => {
+                ctx.beginPath();
+                ctx.arc(kp.x, kp.y, 1.5, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
+
+        const conns = [
+            [0,1], [0,2], [1,3], [2,4],
+            [5,6],[5,7],[7,9],[6,8],[8,10],
+            [5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]
+        ];
+        
         ctx.strokeStyle = color; ctx.lineWidth = 3;
         conns.forEach(([i, j]) => {
             if (keypoints[i]?.score > 0.3 && keypoints[j]?.score > 0.3) {
