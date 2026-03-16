@@ -203,6 +203,14 @@ const DetectionPage = (() => {
                 ctx.beginPath(); ctx.moveTo(kps[i].x, kps[i].y); ctx.lineTo(kps[j].x, kps[j].y); ctx.stroke();
             }
         });
+        
+        if (face) {
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.7)';
+            face.forEach(pt => {
+                ctx.beginPath(); ctx.arc(pt.x, pt.y, 1.5, 0, 2*Math.PI); ctx.fill();
+            });
+        }
+        
         kps.forEach((kp, i) => {
             if (kp.score > 0.3) {
                 ctx.beginPath(); ctx.arc(kp.x, kp.y, 5, 0, 2*Math.PI);

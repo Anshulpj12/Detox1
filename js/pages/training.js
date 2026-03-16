@@ -226,10 +226,10 @@ const TrainingPage = (() => {
                 await MLEngine.initDetectors((msg) => { statusEl.textContent = msg; });
             }
 
-            const { features, poseKeypoints } = await MLEngine.extractFrameFeatures(video);
+            const { features, poseKeypoints, faceLandmarks } = await MLEngine.extractFrameFeatures(video);
 
             // Draw pose on canvas
-            drawPoseOnCanvas(poseKeypoints, video);
+            drawPoseOnCanvas(poseKeypoints, faceLandmarks);
 
             // Store the labeled data
             await DetoxDB.addTrainingData(features, currentLabel);
@@ -275,7 +275,7 @@ const TrainingPage = (() => {
         if (stopBtn) stopBtn.style.display = 'none';
     }
 
-    function drawPoseOnCanvas(keypoints, video) {
+    function drawPoseOnCanvas(keypoints, faceLandmarks) {
         const canvas = document.getElementById('training-canvas');
         if (!canvas || !keypoints) return;
         const ctx = canvas.getContext('2d');
@@ -297,6 +297,16 @@ const TrainingPage = (() => {
                 ctx.stroke();
             }
         });
+
+        // Draw face points
+        if (faceLandmarks) {
+            ctx.fillStyle = 'rgba(255, 200, 0, 0.7)';
+            faceLandmarks.forEach((pt) => {
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 1.5, 0, 2 * Math.PI);
+                ctx.fill();
+            });
+        }
 
         // Draw keypoints
         keypoints.forEach((kp, i) => {

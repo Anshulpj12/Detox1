@@ -320,7 +320,11 @@ const MLEngine = (() => {
                     };
 
                     if (classifier) classifier.dispose();
-                    classifier = await tf.loadLayersModel(tf.io.fromMemory(modelArtifacts));
+                    classifier = await tf.loadLayersModel(tf.io.fromMemory(
+                        modelArtifacts.modelTopology,
+                        modelArtifacts.weightSpecs,
+                        modelArtifacts.weightData
+                    ));
 
                     // Save to localStorage with new ID
                     const newModelId = 'detox-model-' + Date.now();
