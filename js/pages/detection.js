@@ -15,8 +15,93 @@ const DetectionPage = (() => {
     let cameraIdx = 0; // round robin counter
 
     function render() {
-        // (UI injected above) ...
-        // ... (Keep the render function from previous replace, but we omit the string contents for this implementation logic section)
+        const container = document.getElementById('detection-content');
+        container.innerHTML = `
+            <div class="tabs" id="detection-tabs">
+                <button class="tab-btn active" data-tab="upload">📤 Upload Video</button>
+                <button class="tab-btn" data-tab="webcam">📹 Live Webcam</button>
+                <button class="tab-btn" data-tab="multicam">🌐 Multi-Camera</button>
+            </div>
+            
+            <div id="detection-tab-upload">
+                <div class="glass-card">
+                    <div class="upload-zone" id="detection-upload-zone">
+                        <input type="file" id="detection-video-input" accept="video/*">
+                        <div class="upload-zone-icon">🔍</div>
+                        <div class="upload-zone-title">Drop video for detection</div>
+                        <div class="upload-zone-subtitle">Upload a video to analyze for suspicious behaviors</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="detection-tab-webcam" style="display:none;">
+                <div class="glass-card" style="text-align:center;padding:24px;">
+                    <p style="margin-bottom:16px;color:var(--text-secondary);">Start your webcam for live behavior detection</p>
+                    <button class="btn btn-primary" id="start-webcam-btn">📹 Start Webcam</button>
+                    <button class="btn btn-danger" id="stop-webcam-btn" style="display:none;">⏹ Stop Webcam</button>
+                </div>
+            </div>
+            
+            <div id="detection-tab-multicam" style="display:none;">
+                <div class="glass-card" style="padding:16px;">
+                    <div style="font-weight:700;margin-bottom:12px;">WebRTC Multi-Camera Portal</div>
+                    <p style="font-size:0.85rem;color:var(--text-secondary);margin-bottom:16px;">Generate unique connection links and open them on other devices (e.g. your phone) to stream directly into the grid below. No server required.</p>
+                    
+                    <div style="display:flex; gap:12px; align-items:flex-end;">
+                        <div class="form-group" style="margin:0;">
+                            <label class="form-label" style="font-size:0.8rem;">Number of Cameras</label>
+                            <input type="number" id="multicam-count" class="form-input" value="1" min="1" max="6" style="width:100px;">
+                        </div>
+                        <button class="btn btn-primary" id="generate-portals-btn">🔗 Generate Portals</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="detection-panel" id="detection-area" style="display:none;">
+                <div style="display:flex;flex-direction:column;">
+                    <div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--bg-glass);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.05);">
+                        <button class="btn btn-primary" id="start-detection-btn" disabled>▶ Start AI Detection</button>
+                        <button class="btn btn-danger" id="stop-detection-btn" style="display:none;">⏹ Stop AI</button>
+                        <div class="form-group" style="flex-direction:row;align-items:center;gap:8px;margin:0;">
+                            <label class="form-label" style="white-space:nowrap;margin:0;">Alert Threshold:</label>
+                            <input type="range" id="threshold-slider" min="30" max="95" value="65" style="width:120px;accent-color:var(--accent-cyan);">
+                            <span id="threshold-value" style="font-size:0.8rem;color:var(--accent-cyan);font-weight:600;">65%</span>
+                        </div>
+                        <span id="detection-fps" style="font-size:0.75rem;color:var(--text-muted);margin-left:auto;font-weight:bold;">0 FPS</span>
+                    </div>
+
+                    <!-- Single layout -->
+                    <div class="video-container" id="single-detection-container">
+                        <video id="detection-video" crossorigin="anonymous"></video>
+                        <canvas id="detection-canvas"></canvas>
+                    </div>
+                    
+                    <!-- Multi-cam layout -->
+                    <div id="multi-camera-grid" style="display:none; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">
+                        <!-- Slots injected dynamically -->
+                    </div>
+                </div>
+                
+                <div class="detection-sidebar">
+                    <div class="glass-card" style="padding:16px;">
+                        <div style="font-weight:700;margin-bottom:12px;">Live Detection</div>
+                        <div id="live-results"><div class="empty-state" style="padding:20px 0;"><div class="empty-state-desc" style="font-size:0.8rem;">Start detection to see results</div></div></div>
+                    </div>
+                    <div class="glass-card" style="padding:16px;">
+                        <div style="font-weight:700;margin-bottom:12px;display:flex;justify-content:space-between;">
+                            <span>Detection Timeline</span>
+                            <span id="timeline-count" style="font-size:0.75rem;color:var(--text-muted);">0 events</span>
+                        </div>
+                        <div id="detection-timeline" style="max-height:300px;overflow-y:auto;"><div class="empty-state" style="padding:20px 0;"><div class="empty-state-desc" style="font-size:0.8rem;">No behaviors detected yet</div></div></div>
+                    </div>
+                    <div class="glass-card" style="padding:16px;">
+                        <div style="font-weight:700;margin-bottom:8px;">Model Status</div>
+                        <div id="detection-model-status" style="font-size:0.82rem;color:var(--text-secondary);">${MLEngine.isReady() ? '✅ Model loaded' : '⚠️ No model loaded. Train one first.'}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        initEvents();
     }
 
     function initEvents() {
