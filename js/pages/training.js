@@ -167,6 +167,7 @@ const TrainingPage = (() => {
             document.getElementById('training-upload-section').classList.remove('hidden');
             document.getElementById('training-label-section').classList.add('hidden');
             stopAutoCapture();
+            stopContinuousOverlay();
         });
 
         // Label selector
@@ -209,7 +210,57 @@ const TrainingPage = (() => {
             const canvas = document.getElementById('training-canvas');
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
+            
+            startContinuousOverlay();
         });
+    }
+
+    let isDrawingOverlay = false;
+    let overlayAnimFrame = null;
+
+    async function startContinuousOverlay() {
+        if (isDrawingOverlay) return;
+        isDrawingOverlay = true;
+        
+        const video = document.getElementById('training-video');
+        const statusEl = document.getElementById('capture-status');
+        
+        if (!MLEngine.hasDetectors()) {
+            if (statusEl) statusEl.textContent = 'Loading tracking models for preview...';
+            await MLEngine.initDetectors((msg) => { if (statusEl) statusEl.textContent = msg; });
+            if (statusEl) statusEl.textContent = 'Tracking models ready!';
+            setTimeout(() => { if (statusEl && statusEl.textContent.includes('ready')) statusEl.textContent = ''; }, 2000);
+        }
+
+        const loop = async () => {
+            if (!isDrawingOverlay) return;
+            
+            if (video && video.readyState >= 2 && !video.paused && !video.ended) {
+                try {
+                    const [poseKeypoints, faceLandmarks] = await Promise.all([
+                        MLEngine.detectPose(video),
+                        MLEngine.detectFace(video)
+                    ]);
+                    drawPoseOnCanvas(poseKeypoints, faceLandmarks);
+                } catch(e) {}
+            }
+            
+            overlayAnimFrame = requestAnimationFrame(loop);
+        };
+        
+        video.addEventListener('play', () => {
+            if (isDrawingOverlay) loop();
+        });
+        
+        loop();
+    }
+
+    function stopContinuousOverlay() {
+        isDrawingOverlay = false;
+        if (overlayAnimFrame) {
+            cancelAnimationFrame(overlayAnimFrame);
+            overlayAnimFrame = null;
+        }
     }
 
     async function captureCurrentFrame() {

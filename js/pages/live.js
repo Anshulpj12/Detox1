@@ -152,15 +152,10 @@ const LivePage = (() => {
 
     function checkModelStatus() {
         const warning = document.getElementById('live-model-warning');
-        const startBtn = document.getElementById('live-start-btn');
         if (!MLEngine.isReady()) {
             warning.style.display = 'block';
-            startBtn.disabled = true;
-            startBtn.style.opacity = '0.5';
         } else {
             warning.style.display = 'none';
-            startBtn.disabled = false;
-            startBtn.style.opacity = '1';
         }
     }
 
@@ -176,11 +171,6 @@ const LivePage = (() => {
     }
 
     async function startLiveMonitoring() {
-        if (!MLEngine.isReady()) {
-            alert('No model loaded! Train or import a model first.');
-            return;
-        }
-
         const cameraFacing = document.getElementById('live-camera-select').value;
         const soundEnabled = document.getElementById('live-sound-select').value === 'on';
         AlertSystem.setEnabled(soundEnabled);
@@ -266,10 +256,11 @@ const LivePage = (() => {
             if (video.readyState >= 2) {
                 try {
                     const { features, poseKeypoints, faceLandmarks } = await MLEngine.extractFrameFeatures(video);
-                    const results = MLEngine.classify(features);
+                    const results = MLEngine.isReady() ? MLEngine.classify(features) : null;
+
+                    drawLiveOverlay(poseKeypoints, faceLandmarks, results);
 
                     if (results) {
-                        drawLiveOverlay(poseKeypoints, faceLandmarks, results);
                         updateCurrentResults(results);
 
                         sessionStats.totalFrames++;
